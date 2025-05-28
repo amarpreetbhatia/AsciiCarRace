@@ -1,7 +1,9 @@
 package com.game;
 
-import java.util.ArrayList;
-import java.util.Iterator;
+import com.game.hurdle.Hurdle;
+import com.game.hurdle.HurdleManager;
+import com.game.hurdle.StandardHurdle;
+
 import java.util.List;
 import java.util.Random;
 
@@ -9,12 +11,11 @@ import java.util.Random;
  * The Track class represents the game track with boundaries and hurdles.
  * It manages the track state, scrolling, and collision detection.
  * This class follows the Single Responsibility Principle (SRP) by focusing only on
- * track data and logic, decoupled from rendering concerns.
+ * track data and logic, delegating hurdle management to the HurdleManager.
  */
 public class Track {
     private final int width;
     private final int height;
-    private final List<Hurdle> hurdles = new ArrayList<>();
     private final Random random = new Random();
     private final char BOUNDARY = '|';
     private final char EMPTY_SPACE = ' ';
@@ -28,6 +29,9 @@ public class Track {
     private int distanceTraveled = 0;
     private final int DIFFICULTY_INCREASE_THRESHOLD = 500;
     
+    // Hurdle management
+    private final HurdleManager hurdleManager;
+    
     /**
      * Creates a new track with the specified dimensions.
      * 
@@ -38,6 +42,7 @@ public class Track {
         this.width = width;
         this.height = height;
         this.trackData = new char[height][width];
+        this.hurdleManager = new HurdleManager(width, height);
     }
     
     /**
@@ -51,11 +56,12 @@ public class Track {
         setupBoundaries();
         
         // Clear existing hurdles
-        hurdles.clear();
+        hurdleManager.clearHurdles();
         
         // Add some initial hurdles
         for (int i = 0; i < 5; i++) {
-            addHurdle();
+            int x = random.nextInt(width - 4) + 2; // Keep away from boundaries
+            hurdleManager.addHurdle(new StandardHurdle(x, i * 3 + 5)); // Space them out vertically
         }
         
         // Reset difficulty and distance
@@ -100,6 +106,7 @@ public class Track {
         }
         
         // Add hurdles to the track data
+        List<Hurdle> hurdles = hurdleManager.getActiveHurdles();
         for (Hurdle hurdle : hurdles) {
             int x = hurdle.getX();
             int y = hurdle.getY();
@@ -122,22 +129,11 @@ public class Track {
     
     /**
      * Adds a new hurdle at the top of the track.
-     * The position is determined randomly based on the current difficulty level.
+     * This is a convenience method that delegates to the HurdleManager.
      */
     public void addHurdle() {
-        int x = random.nextInt(width - 2) + 1; // Avoid placing hurdles on boundaries
-        
-        // Add additional hurdles based on difficulty level
-        hurdles.add(new Hurdle(x, 0));
-        
-        // For higher difficulty levels, add more hurdles in a pattern
-        if (difficultyLevel >= 2 && random.nextInt(10) < difficultyLevel) {
-            // Add a second hurdle nearby
-            int x2 = Math.max(1, Math.min(width - 2, x + (random.nextBoolean() ? 1 : -1)));
-            hurdles.add(new Hurdle(x2, 0));
-        }
-        
-        // Update the track data
+        // Let the HurdleManager handle hurdle creation
+        hurdleManager.addHurdle(new StandardHurdle(random.nextInt(width - 4) + 2, 0));
         updateTrackData();
     }
     
@@ -146,19 +142,8 @@ public class Track {
      * This simulates the car moving forward.
      */
     public void scroll() {
-        // Move all hurdles down
-        for (Hurdle hurdle : hurdles) {
-            hurdle.moveDown();
-        }
-        
-        // Remove hurdles that have moved off the bottom of the track
-        Iterator<Hurdle> iterator = hurdles.iterator();
-        while (iterator.hasNext()) {
-            Hurdle hurdle = iterator.next();
-            if (hurdle.getY() >= height) {
-                iterator.remove();
-            }
-        }
+        // Let the HurdleManager handle hurdle movement
+        int scoreFromHurdles = hurdleManager.update(difficultyLevel);
         
         // Increment distance traveled
         distanceTraveled++;
@@ -187,9 +172,24 @@ public class Track {
             return true;
         }
         
-        // Check collision with track data (boundaries or hurdles)
-        char elementAtPosition = trackData[carY][carX];
-        return elementAtPosition == BOUNDARY || elementAtPosition == hurdles.get(0).getSymbol();
+        // Check collision with boundaries
+        if (trackData[carY][carX] == BOUNDARY) {
+            return true;
+        }
+        
+        // Check collision with hurdles
+        Hurdle collidedHurdle = hurdleManager.checkCollision(carX, carY);
+        return collidedHurdle != null;
+    }
+    
+    /**
+     * Gets the hurdle that the car has collided with, if any.
+     * 
+     * @param car the player's car
+     * @return the hurdle that the car collided with, or null if none
+     */
+    public Hurdle getCollidedHurdle(Car car) {
+        return hurdleManager.checkCollision(car.getX(), car.getY());
     }
     
     /**
@@ -260,7 +260,7 @@ public class Track {
      * @return the list of hurdles on the track
      */
     public List<Hurdle> getHurdles() {
-        return new ArrayList<>(hurdles); // Return a defensive copy
+        return hurdleManager.getActiveHurdles();
     }
     
     /**
@@ -282,5 +282,12 @@ public class Track {
      */
     public int getDistanceTraveled() {
         return distanceTraveled;
+    }
+    
+    /**
+     * @return the hurdle manager
+     */
+    public HurdleManager getHurdleManager() {
+        return hurdleManager;
     }
 }

@@ -1,5 +1,9 @@
 package com.game;
 
+import com.game.collision.CollisionDetector;
+import com.game.collision.CollisionDetector.CollisionResult;
+import com.game.collision.CollisionDetector.CollisionType;
+import com.game.hurdle.Hurdle;
 import com.game.input.InputHandler;
 import com.game.input.InputSource;
 
@@ -23,11 +27,13 @@ public class GameEngine implements Runnable {
     private final InputHandler inputHandler;
     private final Renderer renderer;
     private final Random random = new Random();
+    private final CollisionDetector collisionDetector;
     
     // Game state
     private final AtomicBoolean running = new AtomicBoolean(false);
     private int score = 0;
     private Instant gameStartTime;
+    private String gameOverReason = "";
     
     // Game configuration
     private final long GAME_DURATION_SECONDS = 60; // 1 minute game
@@ -61,20 +67,25 @@ public class GameEngine implements Runnable {
         private final int score;
         private final long remainingSeconds;
         private final boolean isGameOver;
+        private final String gameOverReason;
         private final int carSpeed;
         private final int difficultyLevel;
         private final int carPositionX;
         private final int carPositionY;
+        private final int hurdleCount;
         
         public GameState(int score, long remainingSeconds, boolean isGameOver, 
-                         int carSpeed, int difficultyLevel, int carPositionX, int carPositionY) {
+                         String gameOverReason, int carSpeed, int difficultyLevel, 
+                         int carPositionX, int carPositionY, int hurdleCount) {
             this.score = score;
             this.remainingSeconds = remainingSeconds;
             this.isGameOver = isGameOver;
+            this.gameOverReason = gameOverReason;
             this.carSpeed = carSpeed;
             this.difficultyLevel = difficultyLevel;
             this.carPositionX = carPositionX;
             this.carPositionY = carPositionY;
+            this.hurdleCount = hurdleCount;
         }
         
         public int getScore() {
@@ -87,6 +98,10 @@ public class GameEngine implements Runnable {
         
         public boolean isGameOver() {
             return isGameOver;
+        }
+        
+        public String getGameOverReason() {
+            return gameOverReason;
         }
         
         public int getCarSpeed() {
@@ -104,6 +119,10 @@ public class GameEngine implements Runnable {
         public int getCarPositionY() {
             return carPositionY;
         }
+        
+        public int getHurdleCount() {
+            return hurdleCount;
+        }
     }
 
     /**
@@ -119,6 +138,7 @@ public class GameEngine implements Runnable {
         this.track = track;
         this.inputHandler = inputHandler;
         this.renderer = renderer;
+        this.collisionDetector = new CollisionDetector();
         
         // Set car boundaries based on track boundaries
         updateCarBoundaries();
@@ -180,6 +200,10 @@ public class GameEngine implements Runnable {
         lastRenderTime = 0;
         firstRender = true;
         
+        // Reset score and game over reason
+        score = 0;
+        gameOverReason = "";
+        
         // Start the game loop in a new thread
         running.set(true);
         gameThread = new Thread(this);
@@ -222,6 +246,9 @@ public class GameEngine implements Runnable {
                 // Update game state
                 update();
                 
+                // Check for collisions - this is separated for SRP
+                checkCollisions();
+                
                 // Render based on render interval and frame rate limit
                 if (tickCount % RENDER_INTERVAL == 0) {
                     long timeSinceLastRender = currentTime - lastRenderTime;
@@ -235,7 +262,7 @@ public class GameEngine implements Runnable {
                 // Check if game time is up
                 Duration elapsed = Duration.between(gameStartTime, Instant.now());
                 if (elapsed.getSeconds() >= GAME_DURATION_SECONDS) {
-                    endGame();
+                    endGame("Time's up!");
                     break;
                 }
                 
@@ -276,21 +303,114 @@ public class GameEngine implements Runnable {
         // Move the track (scrolling effect)
         track.scroll();
         
-        // Add new hurdles randomly based on difficulty
-        int hurdleChance = 2 + track.getDifficultyLevel();
-        if (random.nextInt(10) < hurdleChance) { // Chance increases with difficulty
-            track.addHurdle();
-        }
-        
-        // Check for collisions
-        if (track.checkCollision(car)) {
-            car.crash();
-            // Penalty for hitting hurdles
-            score -= 50;
-        } else if (!car.isCrashed()) {
+        // Increment score for surviving (if not crashed)
+        if (!car.isCrashed()) {
             // Increment score (distance traveled + speed bonus)
             score += car.getSpeed();
         }
+    }
+    
+    /**
+     * Checks for collisions between the car and other game objects.
+     * This method is separated from update() to adhere to SRP.
+     */
+    private void checkCollisions() {
+        if (!running.get() || car.isCrashed()) return;
+        
+        // Use the collision detector to check for collisions
+        CollisionResult result = collisionDetector.checkCollision(car, track);
+        
+        if (result.isCollision()) {
+            // Handle the collision based on its type
+            switch (result.getType()) {
+                case BOUNDARY:
+                    handleBoundaryCollision();
+                    break;
+                    
+                case HURDLE:
+                    handleHurdleCollision(result.getHurdle());
+                    break;
+                    
+                case OUT_OF_BOUNDS:
+                    handleOutOfBoundsCollision();
+                    break;
+                    
+                default:
+                    // No collision or unknown type
+                    break;
+            }
+        }
+    }
+    
+    /**
+     * Handles a collision with a track boundary.
+     */
+    private void handleBoundaryCollision() {
+        car.crash();
+        score -= 30;
+        renderer.showBoundaryHitEffect(car.getX(), car.getY(), 
+                car.getX() <= 1 ? InputSource.Direction.LEFT : InputSource.Direction.RIGHT);
+        
+        // End game if fatal collision is enabled
+        if (isFatalCollision()) {
+            endGame("You crashed into the track boundary!");
+        }
+    }
+    
+    /**
+     * Handles a collision with a hurdle.
+     * 
+     * @param hurdle the hurdle that was hit
+     */
+    private void handleHurdleCollision(Hurdle hurdle) {
+        car.crash();
+        score -= hurdle.getDamageValue();
+        renderer.showCollisionEffect(car.getX(), car.getY(), hurdle.getSymbol());
+        
+        // End game if fatal collision is enabled
+        if (isFatalCollision()) {
+            endGame("You crashed into a " + getHurdleTypeName(hurdle) + "!");
+        }
+    }
+    
+    /**
+     * Handles a collision where the car went out of bounds.
+     */
+    private void handleOutOfBoundsCollision() {
+        car.crash();
+        score -= 50;
+        
+        // End game if fatal collision is enabled
+        if (isFatalCollision()) {
+            endGame("You went out of bounds!");
+        }
+    }
+    
+    /**
+     * Determines if collisions should be fatal (end the game).
+     * This could be a game setting that changes based on difficulty or mode.
+     * 
+     * @return true if collisions should end the game, false otherwise
+     */
+    private boolean isFatalCollision() {
+        // For this implementation, all collisions are fatal
+        return true;
+    }
+    
+    /**
+     * Gets a human-readable name for a hurdle type.
+     * 
+     * @param hurdle the hurdle to get the name for
+     * @return a string describing the hurdle type
+     */
+    private String getHurdleTypeName(Hurdle hurdle) {
+        char symbol = hurdle.getSymbol();
+        return switch (symbol) {
+            case '*' -> "standard hurdle";
+            case 'Z' -> "zigzag hurdle";
+            case '>' -> "fast hurdle";
+            default -> "hurdle";
+        };
     }
 
     /**
@@ -368,13 +488,16 @@ public class GameEngine implements Runnable {
 
     /**
      * Ends the game and displays the final score.
+     * 
+     * @param reason the reason the game ended
      */
-    private void endGame() {
+    private void endGame(String reason) {
         running.set(false);
+        gameOverReason = reason;
         inputHandler.shutdown();
         
         // Show game over screen
-        renderer.showGameOver(score);
+        renderer.showGameOver(score, reason);
         
         // Notify observers of game over
         notifyObservers();
@@ -390,10 +513,12 @@ public class GameEngine implements Runnable {
             score, 
             remainingSeconds, 
             !running.get(),
+            gameOverReason,
             car.getSpeed(),
             track.getDifficultyLevel(),
             car.getX(),
-            car.getY()
+            car.getY(),
+            track.getHurdles().size()
         );
         
         for (GameStateObserver observer : observers) {
@@ -413,5 +538,12 @@ public class GameEngine implements Runnable {
      */
     public boolean isRunning() {
         return running.get();
+    }
+    
+    /**
+     * @return the reason the game ended, or an empty string if the game is still running
+     */
+    public String getGameOverReason() {
+        return gameOverReason;
     }
 }

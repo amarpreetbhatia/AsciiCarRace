@@ -14,6 +14,7 @@ public class Main {
         boolean useAI = false;
         boolean useColors = true;
         boolean showDebug = false;
+        boolean fatalCollisions = true;
         
         for (String arg : args) {
             if (arg.equalsIgnoreCase("--ai")) {
@@ -22,6 +23,8 @@ public class Main {
                 useColors = false;
             } else if (arg.equalsIgnoreCase("--debug")) {
                 showDebug = true;
+            } else if (arg.equalsIgnoreCase("--no-fatal")) {
+                fatalCollisions = false;
             }
         }
         
@@ -50,6 +53,9 @@ public class Main {
                 // This could be extended with additional functionality without modifying GameEngine
                 if (gameState.isGameOver()) {
                     System.out.println("Game has ended with score: " + gameState.getScore());
+                    if (!gameState.getGameOverReason().isEmpty()) {
+                        System.out.println("Reason: " + gameState.getGameOverReason());
+                    }
                 }
             }
         });
@@ -63,6 +69,7 @@ public class Main {
             System.out.println("Use 'w' and 's' to accelerate and decelerate");
             System.out.println("Press Enter after each key press");
         }
+        System.out.println("Avoid hitting hurdles and track boundaries!");
         System.out.println("Game will start in 3 seconds...");
         
         try {

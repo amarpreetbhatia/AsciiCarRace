@@ -1,8 +1,11 @@
 package com.game;
 
+import com.game.hurdle.Hurdle;
 import com.game.input.InputSource;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The Renderer class is responsible for displaying the game state to the console.
@@ -19,6 +22,7 @@ public class Renderer {
     private static final String BLUE = "\u001B[34m";
     private static final String CYAN = "\u001B[36m";
     private static final String BRIGHT_RED = "\u001B[91m";
+    private static final String BRIGHT_YELLOW = "\u001B[93m";
     
     // Rendering configuration
     private final boolean useColors;
@@ -30,6 +34,16 @@ public class Renderer {
     private int boundaryEffectY = -1;
     private InputSource.Direction boundaryEffectDirection;
     private int boundaryEffectDuration = 0;
+    
+    // Collision effect tracking
+    private boolean showingCollisionEffect = false;
+    private int collisionEffectX = -1;
+    private int collisionEffectY = -1;
+    private char collisionEffectSymbol;
+    private int collisionEffectDuration = 0;
+    
+    // Hurdle symbol colors
+    private final Map<Character, String> hurdleColors = new HashMap<>();
     
     /**
      * Creates a new Renderer with default settings.
@@ -47,6 +61,11 @@ public class Renderer {
     public Renderer(boolean useColors, boolean showDebugInfo) {
         this.useColors = useColors;
         this.showDebugInfo = showDebugInfo;
+        
+        // Initialize hurdle colors
+        hurdleColors.put('*', YELLOW);       // Standard hurdle
+        hurdleColors.put('Z', BRIGHT_YELLOW); // Zigzag hurdle
+        hurdleColors.put('>', RED);          // Fast hurdle
     }
     
     /**
@@ -96,6 +115,14 @@ public class Renderer {
                 showingBoundaryEffect = false;
             }
         }
+        
+        // Update collision effect
+        if (showingCollisionEffect) {
+            collisionEffectDuration--;
+            if (collisionEffectDuration <= 0) {
+                showingCollisionEffect = false;
+            }
+        }
     }
     
     /**
@@ -111,6 +138,21 @@ public class Renderer {
         boundaryEffectY = y;
         boundaryEffectDirection = direction;
         boundaryEffectDuration = 2; // Show for 2 frames
+    }
+    
+    /**
+     * Shows a visual effect when the car collides with a hurdle.
+     * 
+     * @param x the x position of the collision
+     * @param y the y position of the collision
+     * @param hurdleSymbol the symbol of the hurdle that was hit
+     */
+    public void showCollisionEffect(int x, int y, char hurdleSymbol) {
+        showingCollisionEffect = true;
+        collisionEffectX = x;
+        collisionEffectY = y;
+        collisionEffectSymbol = hurdleSymbol;
+        collisionEffectDuration = 3; // Show for 3 frames
     }
     
     /**
@@ -172,7 +214,18 @@ public class Renderer {
         
         for (int y = 0; y < track.getHeight(); y++) {
             for (int x = 0; x < track.getWidth(); x++) {
-                if (y == carY && x == carX) {
+                // Check for collision effect
+                if (showingCollisionEffect && y == collisionEffectY && x == collisionEffectX) {
+                    if (useColors) {
+                        sb.append(BRIGHT_RED);
+                    }
+                    sb.append('X'); // Show explosion symbol
+                    if (useColors) {
+                        sb.append(RESET);
+                    }
+                }
+                // Check for car position
+                else if (y == carY && x == carX) {
                     // Render car
                     if (useColors) {
                         sb.append(car.isCrashed() ? RED : GREEN);
@@ -181,8 +234,10 @@ public class Renderer {
                     if (useColors) {
                         sb.append(RESET);
                     }
-                } else if (showingBoundaryEffect && y == boundaryEffectY && 
-                          (x == boundaryEffectX - 1 || x == boundaryEffectX + 1)) {
+                }
+                // Check for boundary hit effect
+                else if (showingBoundaryEffect && y == boundaryEffectY && 
+                        (x == boundaryEffectX - 1 || x == boundaryEffectX + 1)) {
                     // Show boundary hit effect
                     if (useColors) {
                         sb.append(BRIGHT_RED);
@@ -200,14 +255,16 @@ public class Renderer {
                     if (useColors) {
                         sb.append(RESET);
                     }
-                } else {
+                }
+                // Render track element
+                else {
                     // Render track element with appropriate color
                     char element = trackData[y][x];
                     if (useColors) {
                         if (element == track.getBoundary()) {
                             sb.append(BLUE);
-                        } else if (element == '*') { // Hurdle symbol
-                            sb.append(YELLOW);
+                        } else if (hurdleColors.containsKey(element)) {
+                            sb.append(hurdleColors.get(element));
                         }
                     }
                     sb.append(element);
@@ -258,6 +315,18 @@ public class Renderer {
         sb.append(String.format("Track size: %d x %d\n", track.getWidth(), track.getHeight()));
         sb.append(String.format("Hurdle count: %d\n", track.getHurdles().size()));
         sb.append(String.format("Boundary effect: %s\n", showingBoundaryEffect ? "active" : "inactive"));
+        sb.append(String.format("Collision effect: %s\n", showingCollisionEffect ? "active" : "inactive"));
+        
+        // Show hurdle types and positions
+        sb.append("Hurdles:\n");
+        List<Hurdle> hurdles = track.getHurdles();
+        for (int i = 0; i < Math.min(5, hurdles.size()); i++) {
+            Hurdle h = hurdles.get(i);
+            sb.append(String.format("  %c at (%d, %d)\n", h.getSymbol(), h.getX(), h.getY()));
+        }
+        if (hurdles.size() > 5) {
+            sb.append(String.format("  ... and %d more\n", hurdles.size() - 5));
+        }
     }
     
     /**
@@ -266,6 +335,16 @@ public class Renderer {
      * @param finalScore the player's final score
      */
     public void showGameOver(int finalScore) {
+        showGameOver(finalScore, "Game Over!");
+    }
+    
+    /**
+     * Displays the game over screen with the final score and reason.
+     * 
+     * @param finalScore the player's final score
+     * @param reason the reason the game ended
+     */
+    public void showGameOver(int finalScore, String reason) {
         clearConsole();
         
         StringBuilder sb = new StringBuilder();
@@ -284,6 +363,18 @@ public class Renderer {
         String scoreDisplay = String.format("%s%d%s", useColors ? scoreColor : "", finalScore, useColors ? YELLOW : "");
         
         sb.append(String.format("║              Final Score: %-10s              ║\n", scoreDisplay));
+        
+        // Add reason if provided
+        if (reason != null && !reason.isEmpty()) {
+            sb.append("╠══════════════════════════════════════════════════════════╣\n");
+            
+            // Split reason into multiple lines if needed
+            String[] reasonLines = splitTextIntoLines(reason, 50);
+            for (String line : reasonLines) {
+                sb.append(String.format("║ %-54s ║\n", line));
+            }
+        }
+        
         sb.append("╠══════════════════════════════════════════════════════════╣\n");
         sb.append("║              Thank you for playing!                      ║\n");
         sb.append("╚══════════════════════════════════════════════════════════╝\n");
@@ -293,6 +384,30 @@ public class Renderer {
         }
         
         System.out.println(sb);
+    }
+    
+    /**
+     * Splits text into lines of a maximum length.
+     * 
+     * @param text the text to split
+     * @param maxLength the maximum length of each line
+     * @return an array of lines
+     */
+    private String[] splitTextIntoLines(String text, int maxLength) {
+        if (text.length() <= maxLength) {
+            return new String[] { text };
+        }
+        
+        int numLines = (text.length() + maxLength - 1) / maxLength;
+        String[] lines = new String[numLines];
+        
+        for (int i = 0; i < numLines; i++) {
+            int start = i * maxLength;
+            int end = Math.min(start + maxLength, text.length());
+            lines[i] = text.substring(start, end);
+        }
+        
+        return lines;
     }
     
     /**
@@ -313,8 +428,8 @@ public class Renderer {
                 if (useColors) {
                     if (c == track.getBoundary()) {
                         sb.append(BLUE);
-                    } else if (c == '*') { // Hurdle symbol
-                        sb.append(YELLOW);
+                    } else if (hurdleColors.containsKey(c)) {
+                        sb.append(hurdleColors.get(c));
                     }
                 }
                 sb.append(c);
