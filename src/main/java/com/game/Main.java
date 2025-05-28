@@ -13,7 +13,25 @@ public class Main {
         Renderer renderer = new Renderer();
         GameEngine gameEngine = new GameEngine(car, track, inputHandler, renderer);
         
+        // Example of adding a game state observer (demonstrating OCP)
+        gameEngine.addObserver(new GameEngine.GameStateObserver() {
+            @Override
+            public void onGameStateUpdate(GameEngine.GameState gameState) {
+                // This could be extended with additional functionality without modifying GameEngine
+                if (gameState.isGameOver()) {
+                    System.out.println("Game has ended with score: " + gameState.getScore());
+                }
+            }
+        });
+        
         // Start the game
         gameEngine.start();
+        
+        // Add shutdown hook to ensure clean exit
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (gameEngine.isRunning()) {
+                gameEngine.stop();
+            }
+        }));
     }
 }
