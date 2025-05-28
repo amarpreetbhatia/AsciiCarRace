@@ -1,4 +1,4 @@
-package com.game;
+package com.game.input;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -8,12 +8,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * The InputHandler class is responsible for capturing and processing user input.
- * It runs in a separate thread to avoid blocking the game loop.
- * This class follows the Liskov Substitution Principle (LSP) by providing a clean
- * interface that could be implemented by different input sources.
+ * Implementation of InputSource that reads from the keyboard.
+ * This class runs in its own thread to continuously listen for keyboard input.
  */
-public class InputHandler implements Runnable {
+public class KeyboardInputSource implements InputSource, Runnable {
     // Thread-safe storage for the current direction
     private final AtomicReference<Direction> currentDirection = new AtomicReference<>(null);
     
@@ -25,32 +23,22 @@ public class InputHandler implements Runnable {
     private Thread inputThread;
     
     /**
-     * Enum representing possible movement directions.
-     * This provides a clean abstraction over raw key inputs.
+     * Maps a key character to a direction.
+     * 
+     * @param key the key character
+     * @return the corresponding direction, or null if not a direction key
      */
-    public enum Direction {
-        LEFT, RIGHT, UP, DOWN;
-        
-        /**
-         * Maps a key character to a direction.
-         * 
-         * @param key the key character
-         * @return the corresponding direction, or null if not a direction key
-         */
-        public static Direction fromKey(char key) {
-            return switch (Character.toLowerCase(key)) {
-                case 'a' -> LEFT;
-                case 'd' -> RIGHT;
-                case 'w' -> UP;
-                case 's' -> DOWN;
-                default -> null;
-            };
-        }
+    private Direction directionFromKey(char key) {
+        return switch (Character.toLowerCase(key)) {
+            case 'a' -> Direction.LEFT;
+            case 'd' -> Direction.RIGHT;
+            case 'w' -> Direction.UP;
+            case 's' -> Direction.DOWN;
+            default -> null;
+        };
     }
     
-    /**
-     * Initializes the input handler and starts the input thread.
-     */
+    @Override
     public void initialize() {
         if (running) {
             return; // Already running
@@ -65,10 +53,6 @@ public class InputHandler implements Runnable {
         System.out.println("Controls: 'a' for left, 'd' for right, 'w' for accelerate, 's' for decelerate");
     }
     
-    /**
-     * The main run method for the input thread.
-     * Continuously reads from the console and processes input.
-     */
     @Override
     public void run() {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
@@ -119,33 +103,28 @@ public class InputHandler implements Runnable {
      * @param key the key that was pressed
      */
     private void processKey(char key) {
-        Direction direction = Direction.fromKey(key);
+        Direction direction = directionFromKey(key);
         if (direction != null) {
             currentDirection.set(direction);
         }
     }
     
-    /**
-     * Gets the last direction input by the user.
-     * This method is thread-safe and can be called from the game thread.
-     * 
-     * @return the current direction, or null if no direction is set
-     */
-    public Direction getLastDirection() {
+    @Override
+    public Direction getCurrentDirection() {
         return currentDirection.get();
     }
     
-    /**
-     * Clears the last direction after it has been processed.
-     * This method is thread-safe and can be called from the game thread.
-     */
-    public void clearLastDirection() {
+    @Override
+    public void clearCurrentDirection() {
         currentDirection.set(null);
     }
     
-    /**
-     * Shuts down the input handler thread.
-     */
+    @Override
+    public boolean isRunning() {
+        return running;
+    }
+    
+    @Override
     public void shutdown() {
         running = false;
         if (inputThread != null) {
@@ -156,16 +135,5 @@ public class InputHandler implements Runnable {
                 Thread.currentThread().interrupt();
             }
         }
-    }
-    
-    /**
-     * Checks if a specific direction is currently active.
-     * This method is thread-safe and can be called from the game thread.
-     * 
-     * @param direction the direction to check
-     * @return true if the specified direction is active, false otherwise
-     */
-    public boolean isDirectionActive(Direction direction) {
-        return direction.equals(currentDirection.get());
     }
 }

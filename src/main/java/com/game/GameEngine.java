@@ -1,5 +1,8 @@
 package com.game;
 
+import com.game.input.InputHandler;
+import com.game.input.InputSource;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -260,7 +263,7 @@ public class GameEngine implements Runnable {
      * Processes player input to control the car.
      */
     private void handleInput() {
-        InputHandler.Direction direction = inputHandler.getLastDirection();
+        InputSource.Direction direction = inputHandler.getLastDirection();
         if (direction != null) {
             switch (direction) {
                 case LEFT -> car.moveLeft();

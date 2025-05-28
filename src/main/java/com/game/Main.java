@@ -1,18 +1,44 @@
 package com.game;
 
+import com.game.input.AIInputSource;
+import com.game.input.InputHandler;
+import com.game.input.KeyboardInputSource;
+
 /**
  * Entry point for the ASCII Car Race Game.
  * This class initializes the game components and starts the game loop.
  */
 public class Main {
     public static void main(String[] args) {
+        // Parse command line arguments
+        boolean useAI = false;
+        boolean useColors = true;
+        boolean showDebug = false;
+        
+        for (String arg : args) {
+            if (arg.equalsIgnoreCase("--ai")) {
+                useAI = true;
+            } else if (arg.equalsIgnoreCase("--no-color")) {
+                useColors = false;
+            } else if (arg.equalsIgnoreCase("--debug")) {
+                showDebug = true;
+            }
+        }
+        
         // Create game components
         Car car = new Car(10, 5); // Starting position
         Track track = new Track(20, 40); // Width and height
-        InputHandler inputHandler = new InputHandler();
         
-        // Create renderer with colors enabled
-        Renderer renderer = new Renderer(true, false);
+        // Create input handler based on command line arguments
+        InputHandler inputHandler;
+        if (useAI) {
+            inputHandler = new InputHandler(new AIInputSource());
+        } else {
+            inputHandler = new InputHandler(new KeyboardInputSource());
+        }
+        
+        // Create renderer with colors enabled/disabled based on command line arguments
+        Renderer renderer = new Renderer(useColors, showDebug);
         
         // Create and configure the game engine
         GameEngine gameEngine = new GameEngine(car, track, inputHandler, renderer);
@@ -30,9 +56,13 @@ public class Main {
         
         // Display welcome message
         System.out.println("Starting ASCII Car Race Game...");
-        System.out.println("Use 'a' and 'd' to move left and right");
-        System.out.println("Use 'w' and 's' to accelerate and decelerate");
-        System.out.println("Press Enter after each key press");
+        if (useAI) {
+            System.out.println("AI mode enabled - computer will control the car");
+        } else {
+            System.out.println("Use 'a' and 'd' to move left and right");
+            System.out.println("Use 'w' and 's' to accelerate and decelerate");
+            System.out.println("Press Enter after each key press");
+        }
         System.out.println("Game will start in 3 seconds...");
         
         try {
