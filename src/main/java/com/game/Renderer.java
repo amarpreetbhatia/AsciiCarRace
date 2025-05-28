@@ -1,5 +1,7 @@
 package com.game;
 
+import java.util.List;
+
 /**
  * The Renderer class is responsible for displaying the game state to the console.
  * It renders the track, car, hurdles, and game information.
@@ -7,6 +9,35 @@ package com.game;
  * rendering concerns, decoupled from game logic.
  */
 public class Renderer {
+    // ANSI color codes for enhanced visual experience
+    private static final String RESET = "\u001B[0m";
+    private static final String RED = "\u001B[31m";
+    private static final String GREEN = "\u001B[32m";
+    private static final String YELLOW = "\u001B[33m";
+    private static final String BLUE = "\u001B[34m";
+    private static final String CYAN = "\u001B[36m";
+    
+    // Rendering configuration
+    private final boolean useColors;
+    private final boolean showDebugInfo;
+    
+    /**
+     * Creates a new Renderer with default settings.
+     */
+    public Renderer() {
+        this(true, false);
+    }
+    
+    /**
+     * Creates a new Renderer with specified settings.
+     * 
+     * @param useColors whether to use ANSI colors in the output
+     * @param showDebugInfo whether to show debug information
+     */
+    public Renderer(boolean useColors, boolean showDebugInfo) {
+        this.useColors = useColors;
+        this.showDebugInfo = showDebugInfo;
+    }
     
     /**
      * Renders the current game state to the console.
@@ -17,45 +48,155 @@ public class Renderer {
      * @param remainingSeconds the remaining game time in seconds
      */
     public void render(Car car, Track track, int score, long remainingSeconds) {
-        // Clear console (ANSI escape code)
+        // Clear console
+        clearConsole();
+        
+        // Build the complete display
+        StringBuilder display = new StringBuilder();
+        
+        // Add header with game info
+        appendHeader(display, score, remainingSeconds, car.getSpeed(), track.getDifficultyLevel(), track.getDistanceTraveled());
+        
+        // Get track data and render it with the car
+        appendGameDisplay(display, car, track);
+        
+        // Add footer with controls
+        appendFooter(display);
+        
+        // Add debug info if enabled
+        if (showDebugInfo) {
+            appendDebugInfo(display, car, track);
+        }
+        
+        // Print the complete display to console
+        System.out.println(display);
+    }
+    
+    /**
+     * Clears the console screen.
+     */
+    private void clearConsole() {
         System.out.print("\033[H\033[2J");
         System.out.flush();
+    }
+    
+    /**
+     * Appends the game header with score and time information.
+     * 
+     * @param sb the StringBuilder to append to
+     * @param score the current score
+     * @param remainingSeconds the remaining game time in seconds
+     * @param carSpeed the current car speed
+     * @param difficultyLevel the current difficulty level
+     * @param distance the distance traveled
+     */
+    private void appendHeader(StringBuilder sb, int score, long remainingSeconds, 
+                             int carSpeed, int difficultyLevel, int distance) {
+        if (useColors) {
+            sb.append(CYAN);
+        }
         
-        // Get the track data
+        sb.append("╔══════════════════════════════════════════════════════════╗\n");
+        sb.append("║                    ASCII CAR RACE                        ║\n");
+        sb.append("╠══════════════════════════════════════════════════════════╣\n");
+        
+        // Format the score with color based on value
+        String scoreColor = score >= 0 ? GREEN : RED;
+        String scoreDisplay = String.format("%s%d%s", useColors ? scoreColor : "", score, useColors ? CYAN : "");
+        
+        // Format the time with color based on urgency
+        String timeColor = remainingSeconds > 10 ? GREEN : (remainingSeconds > 5 ? YELLOW : RED);
+        String timeDisplay = String.format("%s%d%s", useColors ? timeColor : "", remainingSeconds, useColors ? CYAN : "");
+        
+        sb.append(String.format("║ Score: %-10s Time: %-5s Speed: %-2d Level: %-2d ║\n", 
+                               scoreDisplay, timeDisplay, carSpeed, difficultyLevel));
+        sb.append("╚══════════════════════════════════════════════════════════╝\n\n");
+        
+        if (useColors) {
+            sb.append(RESET);
+        }
+    }
+    
+    /**
+     * Appends the main game display with track and car.
+     * 
+     * @param sb the StringBuilder to append to
+     * @param car the player's car
+     * @param track the game track
+     */
+    private void appendGameDisplay(StringBuilder sb, Car car, Track track) {
         char[][] trackData = track.getTrackData();
-        
-        // Add car to the display (without modifying the track data)
         int carX = car.getX();
         int carY = car.getY();
         
-        // Create a StringBuilder for the entire display
-        StringBuilder sb = new StringBuilder();
-        
-        // Add header with game info
-        sb.append("ASCII Car Race - Score: ").append(score)
-          .append(" | Time: ").append(remainingSeconds).append("s")
-          .append(" | Difficulty: ").append(track.getDifficultyLevel())
-          .append(" | Distance: ").append(track.getDistanceTraveled())
-          .append("\n");
-        
-        // Add the game display
         for (int y = 0; y < track.getHeight(); y++) {
             for (int x = 0; x < track.getWidth(); x++) {
-                // If this is the car's position, render the car instead of the track element
                 if (y == carY && x == carX) {
+                    // Render car
+                    if (useColors) {
+                        sb.append(car.isCrashed() ? RED : GREEN);
+                    }
                     sb.append(car.getSymbol());
+                    if (useColors) {
+                        sb.append(RESET);
+                    }
                 } else {
-                    sb.append(trackData[y][x]);
+                    // Render track element with appropriate color
+                    char element = trackData[y][x];
+                    if (useColors) {
+                        if (element == track.getBoundary()) {
+                            sb.append(BLUE);
+                        } else if (element == '*') { // Hurdle symbol
+                            sb.append(YELLOW);
+                        }
+                    }
+                    sb.append(element);
+                    if (useColors) {
+                        sb.append(RESET);
+                    }
                 }
             }
             sb.append('\n');
         }
+        sb.append('\n');
+    }
+    
+    /**
+     * Appends the footer with control information.
+     * 
+     * @param sb the StringBuilder to append to
+     */
+    private void appendFooter(StringBuilder sb) {
+        if (useColors) {
+            sb.append(CYAN);
+        }
         
-        // Add controls reminder
-        sb.append("\nControls: 'a' for left, 'd' for right\n");
+        sb.append("╔══════════════════════════════════════════════════════════╗\n");
+        sb.append("║                      CONTROLS                            ║\n");
+        sb.append("╠══════════════════════════════════════════════════════════╣\n");
+        sb.append("║ 'a' - Move Left  |  'd' - Move Right                     ║\n");
+        sb.append("║ 'w' - Accelerate |  's' - Decelerate                     ║\n");
+        sb.append("╚══════════════════════════════════════════════════════════╝\n");
         
-        // Print to console
-        System.out.println(sb);
+        if (useColors) {
+            sb.append(RESET);
+        }
+    }
+    
+    /**
+     * Appends debug information about the game state.
+     * 
+     * @param sb the StringBuilder to append to
+     * @param car the player's car
+     * @param track the game track
+     */
+    private void appendDebugInfo(StringBuilder sb, Car car, Track track) {
+        sb.append("\n--- DEBUG INFO ---\n");
+        sb.append(String.format("Car position: (%d, %d)\n", car.getX(), car.getY()));
+        sb.append(String.format("Car crashed: %s\n", car.isCrashed()));
+        sb.append(String.format("Car speed: %d/%d\n", car.getSpeed(), car.getMaxSpeed()));
+        sb.append(String.format("Track size: %d x %d\n", track.getWidth(), track.getHeight()));
+        sb.append(String.format("Hurdle count: %d\n", track.getHurdles().size()));
     }
     
     /**
@@ -64,12 +205,65 @@ public class Renderer {
      * @param finalScore the player's final score
      */
     public void showGameOver(int finalScore) {
-        System.out.println("\n\n");
-        System.out.println("=========================");
-        System.out.println("       GAME OVER        ");
-        System.out.println("=========================");
-        System.out.println("Final Score: " + finalScore);
-        System.out.println("=========================");
-        System.out.println("\nThank you for playing!");
+        clearConsole();
+        
+        StringBuilder sb = new StringBuilder();
+        
+        if (useColors) {
+            sb.append(YELLOW);
+        }
+        
+        sb.append("\n\n");
+        sb.append("╔══════════════════════════════════════════════════════════╗\n");
+        sb.append("║                      GAME OVER                           ║\n");
+        sb.append("╠══════════════════════════════════════════════════════════╣\n");
+        
+        // Format the score with color based on value
+        String scoreColor = finalScore >= 500 ? GREEN : (finalScore >= 100 ? YELLOW : RED);
+        String scoreDisplay = String.format("%s%d%s", useColors ? scoreColor : "", finalScore, useColors ? YELLOW : "");
+        
+        sb.append(String.format("║              Final Score: %-10s              ║\n", scoreDisplay));
+        sb.append("╠══════════════════════════════════════════════════════════╣\n");
+        sb.append("║              Thank you for playing!                      ║\n");
+        sb.append("╚══════════════════════════════════════════════════════════╝\n");
+        
+        if (useColors) {
+            sb.append(RESET);
+        }
+        
+        System.out.println(sb);
+    }
+    
+    /**
+     * Renders a specific section of the track for preview or debugging.
+     * 
+     * @param track the game track
+     * @param startRow the starting row index
+     * @param endRow the ending row index
+     */
+    public void renderTrackSection(Track track, int startRow, int endRow) {
+        char[][] section = track.getSection(startRow, endRow);
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("Track section preview:\n");
+        
+        for (char[] row : section) {
+            for (char c : row) {
+                if (useColors) {
+                    if (c == track.getBoundary()) {
+                        sb.append(BLUE);
+                    } else if (c == '*') { // Hurdle symbol
+                        sb.append(YELLOW);
+                    }
+                }
+                sb.append(c);
+                if (useColors) {
+                    sb.append(RESET);
+                }
+            }
+            sb.append('\n');
+        }
+        
+        System.out.println(sb);
     }
 }
