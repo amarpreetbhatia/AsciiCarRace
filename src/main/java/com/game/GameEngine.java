@@ -29,7 +29,12 @@ public class GameEngine implements Runnable {
     // Game configuration
     private final long GAME_DURATION_SECONDS = 60; // 1 minute game
     private final int TICK_RATE_MS = 50; // 20 ticks per second
-    private final int RENDER_INTERVAL = 2; // Render every 2 ticks (10 FPS)
+    private final int RENDER_INTERVAL = 1; // Render every tick for smooth animation
+    private final int FRAME_RATE_LIMIT_MS = 33; // ~30 FPS limit
+    
+    // Animation and rendering
+    private long lastRenderTime = 0;
+    private boolean firstRender = true;
     
     // Thread for game loop
     private Thread gameThread;
@@ -86,6 +91,14 @@ public class GameEngine implements Runnable {
         }
     }
 
+    /**
+     * Creates a new GameEngine with the specified components.
+     * 
+     * @param car the player's car
+     * @param track the game track
+     * @param inputHandler the input handler
+     * @param renderer the renderer
+     */
     public GameEngine(Car car, Track track, InputHandler inputHandler, Renderer renderer) {
         this.car = car;
         this.track = track;
@@ -129,6 +142,10 @@ public class GameEngine implements Runnable {
         track.initialize();
         car.reset(track.getWidth() / 2, track.getHeight() - 3); // Position car near bottom
         
+        // Reset rendering state
+        lastRenderTime = 0;
+        firstRender = true;
+        
         // Start the game loop in a new thread
         running.set(true);
         gameThread = new Thread(this);
@@ -158,6 +175,9 @@ public class GameEngine implements Runnable {
         int tickCount = 0;
         long lastTickTime = System.currentTimeMillis();
         
+        // Show initial game state
+        render();
+        
         while (running.get()) {
             // Calculate time since last tick
             long currentTime = System.currentTimeMillis();
@@ -168,15 +188,21 @@ public class GameEngine implements Runnable {
                 // Update game state
                 update();
                 
-                // Render every RENDER_INTERVAL ticks
+                // Render based on render interval and frame rate limit
                 if (tickCount % RENDER_INTERVAL == 0) {
-                    render();
+                    long timeSinceLastRender = currentTime - lastRenderTime;
+                    if (timeSinceLastRender >= FRAME_RATE_LIMIT_MS || firstRender) {
+                        render();
+                        lastRenderTime = currentTime;
+                        firstRender = false;
+                    }
                 }
                 
                 // Check if game time is up
                 Duration elapsed = Duration.between(gameStartTime, Instant.now());
                 if (elapsed.getSeconds() >= GAME_DURATION_SECONDS) {
                     endGame();
+                    break;
                 }
                 
                 // Update tick tracking
@@ -189,7 +215,8 @@ public class GameEngine implements Runnable {
             
             // Sleep to reduce CPU usage
             try {
-                Thread.sleep(Math.max(1, TICK_RATE_MS - elapsedTime));
+                long sleepTime = Math.max(1, TICK_RATE_MS - (System.currentTimeMillis() - lastTickTime));
+                Thread.sleep(sleepTime);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
@@ -247,15 +274,17 @@ public class GameEngine implements Runnable {
 
     /**
      * Renders the current game state.
+     * This method uses the Renderer to display the game state to the console.
+     * The Renderer handles clearing the console for smooth animation.
      */
     private void render() {
         if (!running.get()) return;
         
         // Calculate remaining time
         Duration elapsed = Duration.between(gameStartTime, Instant.now());
-        long remainingSeconds = GAME_DURATION_SECONDS - elapsed.getSeconds();
+        long remainingSeconds = Math.max(0, GAME_DURATION_SECONDS - elapsed.getSeconds());
         
-        // Render the game
+        // Render the game (the renderer will clear the console)
         renderer.render(car, track, score, remainingSeconds);
     }
 
@@ -265,6 +294,8 @@ public class GameEngine implements Runnable {
     private void endGame() {
         running.set(false);
         inputHandler.shutdown();
+        
+        // Show game over screen
         renderer.showGameOver(score);
         
         // Notify observers of game over

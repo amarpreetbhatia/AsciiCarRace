@@ -10,7 +10,11 @@ public class Main {
         Car car = new Car(10, 5); // Starting position
         Track track = new Track(20, 40); // Width and height
         InputHandler inputHandler = new InputHandler();
-        Renderer renderer = new Renderer();
+        
+        // Create renderer with colors enabled
+        Renderer renderer = new Renderer(true, false);
+        
+        // Create and configure the game engine
         GameEngine gameEngine = new GameEngine(car, track, inputHandler, renderer);
         
         // Example of adding a game state observer (demonstrating OCP)
@@ -23,6 +27,19 @@ public class Main {
                 }
             }
         });
+        
+        // Display welcome message
+        System.out.println("Starting ASCII Car Race Game...");
+        System.out.println("Use 'a' and 'd' to move left and right");
+        System.out.println("Use 'w' and 's' to accelerate and decelerate");
+        System.out.println("Press Enter after each key press");
+        System.out.println("Game will start in 3 seconds...");
+        
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         
         // Start the game
         gameEngine.start();
