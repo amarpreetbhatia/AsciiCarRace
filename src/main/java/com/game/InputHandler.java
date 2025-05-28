@@ -16,7 +16,7 @@ public class InputHandler {
     private volatile boolean running = false;
     
     public enum Direction {
-        LEFT, RIGHT
+        LEFT, RIGHT, UP, DOWN
     }
     
     /**
@@ -32,7 +32,7 @@ public class InputHandler {
      */
     private void readInput() {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
-            System.out.println("Controls: 'a' for left, 'd' for right");
+            System.out.println("Controls: 'a' for left, 'd' for right, 'w' for accelerate, 's' for decelerate");
             
             while (running) {
                 if (reader.ready()) {
@@ -58,6 +58,8 @@ public class InputHandler {
         switch (key) {
             case 'a', 'A' -> lastDirection = Direction.LEFT;
             case 'd', 'D' -> lastDirection = Direction.RIGHT;
+            case 'w', 'W' -> lastDirection = Direction.UP;
+            case 's', 'S' -> lastDirection = Direction.DOWN;
         }
     }
     

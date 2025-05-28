@@ -53,11 +53,16 @@ public class GameEngine implements Runnable {
         private final int score;
         private final long remainingSeconds;
         private final boolean isGameOver;
+        private final int carSpeed;
+        private final int difficultyLevel;
         
-        public GameState(int score, long remainingSeconds, boolean isGameOver) {
+        public GameState(int score, long remainingSeconds, boolean isGameOver, 
+                         int carSpeed, int difficultyLevel) {
             this.score = score;
             this.remainingSeconds = remainingSeconds;
             this.isGameOver = isGameOver;
+            this.carSpeed = carSpeed;
+            this.difficultyLevel = difficultyLevel;
         }
         
         public int getScore() {
@@ -71,6 +76,14 @@ public class GameEngine implements Runnable {
         public boolean isGameOver() {
             return isGameOver;
         }
+        
+        public int getCarSpeed() {
+            return carSpeed;
+        }
+        
+        public int getDifficultyLevel() {
+            return difficultyLevel;
+        }
     }
 
     public GameEngine(Car car, Track track, InputHandler inputHandler, Renderer renderer) {
@@ -78,6 +91,9 @@ public class GameEngine implements Runnable {
         this.track = track;
         this.inputHandler = inputHandler;
         this.renderer = renderer;
+        
+        // Set car boundaries based on track width
+        car.setBoundaries(1, track.getWidth() - 2);
     }
     
     /**
@@ -111,6 +127,7 @@ public class GameEngine implements Runnable {
         gameStartTime = Instant.now();
         inputHandler.initialize();
         track.initialize();
+        car.reset(track.getWidth() / 2, track.getHeight() - 3); // Position car near bottom
         
         // Start the game loop in a new thread
         running.set(true);
@@ -186,14 +203,18 @@ public class GameEngine implements Runnable {
     private void update() {
         if (!running.get()) return;
         
+        // Update car state
+        car.update();
+        
         // Process player input
         handleInput();
         
         // Move the track (scrolling effect)
         track.scroll();
         
-        // Add new hurdles randomly
-        if (random.nextInt(10) < 3) { // 30% chance each update
+        // Add new hurdles randomly based on difficulty
+        int hurdleChance = 2 + track.getDifficultyLevel();
+        if (random.nextInt(10) < hurdleChance) { // Chance increases with difficulty
             track.addHurdle();
         }
         
@@ -202,9 +223,9 @@ public class GameEngine implements Runnable {
             car.crash();
             // Penalty for hitting hurdles
             score -= 50;
-        } else {
-            // Increment score (distance traveled)
-            score++;
+        } else if (!car.isCrashed()) {
+            // Increment score (distance traveled + speed bonus)
+            score += car.getSpeed();
         }
     }
 
@@ -217,6 +238,8 @@ public class GameEngine implements Runnable {
             switch (direction) {
                 case LEFT -> car.moveLeft();
                 case RIGHT -> car.moveRight();
+                case UP -> car.accelerate();
+                case DOWN -> car.decelerate();
             }
             inputHandler.clearLastDirection();
         }
@@ -254,7 +277,13 @@ public class GameEngine implements Runnable {
     private void notifyObservers() {
         Duration elapsed = Duration.between(gameStartTime, Instant.now());
         long remainingSeconds = Math.max(0, GAME_DURATION_SECONDS - elapsed.getSeconds());
-        GameState state = new GameState(score, remainingSeconds, !running.get());
+        GameState state = new GameState(
+            score, 
+            remainingSeconds, 
+            !running.get(),
+            car.getSpeed(),
+            track.getDifficultyLevel()
+        );
         
         for (GameStateObserver observer : observers) {
             observer.onGameStateUpdate(state);
