@@ -3,6 +3,8 @@ package com.game;
 /**
  * The Renderer class is responsible for displaying the game state to the console.
  * It renders the track, car, hurdles, and game information.
+ * This class follows the Single Responsibility Principle (SRP) by focusing only on
+ * rendering concerns, decoupled from game logic.
  */
 public class Renderer {
     
@@ -19,48 +21,32 @@ public class Renderer {
         System.out.print("\033[H\033[2J");
         System.out.flush();
         
-        // Create a 2D representation of the game
-        char[][] display = new char[track.getHeight()][track.getWidth()];
+        // Get the track data
+        char[][] trackData = track.getTrackData();
         
-        // Fill with empty spaces
-        for (int y = 0; y < track.getHeight(); y++) {
-            for (int x = 0; x < track.getWidth(); x++) {
-                display[y][x] = ' ';
-            }
-        }
+        // Add car to the display (without modifying the track data)
+        int carX = car.getX();
+        int carY = car.getY();
         
-        // Add track boundaries
-        for (int y = 0; y < track.getHeight(); y++) {
-            display[y][0] = track.getBoundary();
-            display[y][track.getWidth() - 1] = track.getBoundary();
-        }
-        
-        // Add hurdles
-        for (Hurdle hurdle : track.getHurdles()) {
-            int x = hurdle.getX();
-            int y = hurdle.getY();
-            if (y >= 0 && y < track.getHeight() && x >= 0 && x < track.getWidth()) {
-                display[y][x] = hurdle.getSymbol();
-            }
-        }
-        
-        // Add car
-        if (car.getY() >= 0 && car.getY() < track.getHeight() && 
-            car.getX() >= 0 && car.getX() < track.getWidth()) {
-            display[car.getY()][car.getX()] = car.getSymbol();
-        }
-        
-        // Render the display
+        // Create a StringBuilder for the entire display
         StringBuilder sb = new StringBuilder();
         
         // Add header with game info
         sb.append("ASCII Car Race - Score: ").append(score)
-          .append(" | Time: ").append(remainingSeconds).append("s\n");
+          .append(" | Time: ").append(remainingSeconds).append("s")
+          .append(" | Difficulty: ").append(track.getDifficultyLevel())
+          .append(" | Distance: ").append(track.getDistanceTraveled())
+          .append("\n");
         
         // Add the game display
         for (int y = 0; y < track.getHeight(); y++) {
             for (int x = 0; x < track.getWidth(); x++) {
-                sb.append(display[y][x]);
+                // If this is the car's position, render the car instead of the track element
+                if (y == carY && x == carX) {
+                    sb.append(car.getSymbol());
+                } else {
+                    sb.append(trackData[y][x]);
+                }
             }
             sb.append('\n');
         }
