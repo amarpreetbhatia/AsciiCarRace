@@ -1,5 +1,7 @@
 package com.game;
 
+import com.game.input.InputSource;
+
 import java.util.List;
 
 /**
@@ -16,10 +18,18 @@ public class Renderer {
     private static final String YELLOW = "\u001B[33m";
     private static final String BLUE = "\u001B[34m";
     private static final String CYAN = "\u001B[36m";
+    private static final String BRIGHT_RED = "\u001B[91m";
     
     // Rendering configuration
     private final boolean useColors;
     private final boolean showDebugInfo;
+    
+    // Visual effect tracking
+    private boolean showingBoundaryEffect = false;
+    private int boundaryEffectX = -1;
+    private int boundaryEffectY = -1;
+    private InputSource.Direction boundaryEffectDirection;
+    private int boundaryEffectDuration = 0;
     
     /**
      * Creates a new Renderer with default settings.
@@ -70,6 +80,37 @@ public class Renderer {
         
         // Print the complete display to console
         System.out.println(display);
+        
+        // Update visual effects
+        updateVisualEffects();
+    }
+    
+    /**
+     * Updates any active visual effects.
+     */
+    private void updateVisualEffects() {
+        // Update boundary hit effect
+        if (showingBoundaryEffect) {
+            boundaryEffectDuration--;
+            if (boundaryEffectDuration <= 0) {
+                showingBoundaryEffect = false;
+            }
+        }
+    }
+    
+    /**
+     * Shows a visual effect when the car hits a boundary.
+     * 
+     * @param x the x position of the effect
+     * @param y the y position of the effect
+     * @param direction the direction the car was trying to move
+     */
+    public void showBoundaryHitEffect(int x, int y, InputSource.Direction direction) {
+        showingBoundaryEffect = true;
+        boundaryEffectX = x;
+        boundaryEffectY = y;
+        boundaryEffectDirection = direction;
+        boundaryEffectDuration = 2; // Show for 2 frames
     }
     
     /**
@@ -140,6 +181,25 @@ public class Renderer {
                     if (useColors) {
                         sb.append(RESET);
                     }
+                } else if (showingBoundaryEffect && y == boundaryEffectY && 
+                          (x == boundaryEffectX - 1 || x == boundaryEffectX + 1)) {
+                    // Show boundary hit effect
+                    if (useColors) {
+                        sb.append(BRIGHT_RED);
+                    }
+                    
+                    // Show different effect based on direction
+                    if (boundaryEffectDirection == InputSource.Direction.LEFT && x == boundaryEffectX - 1) {
+                        sb.append('!');
+                    } else if (boundaryEffectDirection == InputSource.Direction.RIGHT && x == boundaryEffectX + 1) {
+                        sb.append('!');
+                    } else {
+                        sb.append(trackData[y][x]);
+                    }
+                    
+                    if (useColors) {
+                        sb.append(RESET);
+                    }
                 } else {
                     // Render track element with appropriate color
                     char element = trackData[y][x];
@@ -197,6 +257,7 @@ public class Renderer {
         sb.append(String.format("Car speed: %d/%d\n", car.getSpeed(), car.getMaxSpeed()));
         sb.append(String.format("Track size: %d x %d\n", track.getWidth(), track.getHeight()));
         sb.append(String.format("Hurdle count: %d\n", track.getHurdles().size()));
+        sb.append(String.format("Boundary effect: %s\n", showingBoundaryEffect ? "active" : "inactive"));
     }
     
     /**

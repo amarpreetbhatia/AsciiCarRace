@@ -63,14 +63,18 @@ public class GameEngine implements Runnable {
         private final boolean isGameOver;
         private final int carSpeed;
         private final int difficultyLevel;
+        private final int carPositionX;
+        private final int carPositionY;
         
         public GameState(int score, long remainingSeconds, boolean isGameOver, 
-                         int carSpeed, int difficultyLevel) {
+                         int carSpeed, int difficultyLevel, int carPositionX, int carPositionY) {
             this.score = score;
             this.remainingSeconds = remainingSeconds;
             this.isGameOver = isGameOver;
             this.carSpeed = carSpeed;
             this.difficultyLevel = difficultyLevel;
+            this.carPositionX = carPositionX;
+            this.carPositionY = carPositionY;
         }
         
         public int getScore() {
@@ -92,6 +96,14 @@ public class GameEngine implements Runnable {
         public int getDifficultyLevel() {
             return difficultyLevel;
         }
+        
+        public int getCarPositionX() {
+            return carPositionX;
+        }
+        
+        public int getCarPositionY() {
+            return carPositionY;
+        }
     }
 
     /**
@@ -108,8 +120,20 @@ public class GameEngine implements Runnable {
         this.inputHandler = inputHandler;
         this.renderer = renderer;
         
-        // Set car boundaries based on track width
-        car.setBoundaries(1, track.getWidth() - 2);
+        // Set car boundaries based on track boundaries
+        updateCarBoundaries();
+    }
+    
+    /**
+     * Updates the car's movement boundaries based on the track boundaries.
+     * This ensures the car cannot move outside the track.
+     */
+    private void updateCarBoundaries() {
+        // Set boundaries to keep car inside the track (accounting for track boundaries)
+        int leftBoundary = 1; // One position right of the left boundary
+        int rightBoundary = track.getWidth() - 2; // One position left of the right boundary
+        
+        car.setBoundaries(leftBoundary, rightBoundary);
     }
     
     /**
@@ -143,7 +167,14 @@ public class GameEngine implements Runnable {
         gameStartTime = Instant.now();
         inputHandler.initialize();
         track.initialize();
-        car.reset(track.getWidth() / 2, track.getHeight() - 3); // Position car near bottom
+        
+        // Position car near bottom center of track
+        int startX = track.getWidth() / 2;
+        int startY = track.getHeight() - 3;
+        car.reset(startX, startY);
+        
+        // Update car boundaries
+        updateCarBoundaries();
         
         // Reset rendering state
         lastRenderTime = 0;
@@ -239,6 +270,9 @@ public class GameEngine implements Runnable {
         // Process player input
         handleInput();
         
+        // Ensure car stays within boundaries after movement
+        enforceCarBoundaries();
+        
         // Move the track (scrolling effect)
         track.scroll();
         
@@ -260,17 +294,58 @@ public class GameEngine implements Runnable {
     }
 
     /**
+     * Ensures the car stays within the track boundaries.
+     * This is a safety check in addition to the boundary checks in the Car class.
+     */
+    private void enforceCarBoundaries() {
+        int x = car.getX();
+        int leftBoundary = 1; // One position right of the left boundary
+        int rightBoundary = track.getWidth() - 2; // One position left of the right boundary
+        
+        // If car somehow got outside boundaries, move it back
+        if (x < leftBoundary) {
+            car.reset(leftBoundary, car.getY());
+        } else if (x > rightBoundary) {
+            car.reset(rightBoundary, car.getY());
+        }
+    }
+
+    /**
      * Processes player input to control the car.
+     * Handles movement with boundary checks to prevent the car from leaving the track.
      */
     private void handleInput() {
         InputSource.Direction direction = inputHandler.getLastDirection();
         if (direction != null) {
+            boolean moved = false;
+            
             switch (direction) {
-                case LEFT -> car.moveLeft();
-                case RIGHT -> car.moveRight();
-                case UP -> car.accelerate();
-                case DOWN -> car.decelerate();
+                case LEFT:
+                    moved = car.moveLeft();
+                    if (!moved && !car.isCrashed()) {
+                        // If car couldn't move left, it's at the boundary
+                        renderer.showBoundaryHitEffect(car.getX(), car.getY(), direction);
+                    }
+                    break;
+                    
+                case RIGHT:
+                    moved = car.moveRight();
+                    if (!moved && !car.isCrashed()) {
+                        // If car couldn't move right, it's at the boundary
+                        renderer.showBoundaryHitEffect(car.getX(), car.getY(), direction);
+                    }
+                    break;
+                    
+                case UP:
+                    car.accelerate();
+                    break;
+                    
+                case DOWN:
+                    car.decelerate();
+                    break;
             }
+            
+            // Clear the input after processing
             inputHandler.clearLastDirection();
         }
     }
@@ -316,7 +391,9 @@ public class GameEngine implements Runnable {
             remainingSeconds, 
             !running.get(),
             car.getSpeed(),
-            track.getDifficultyLevel()
+            track.getDifficultyLevel(),
+            car.getX(),
+            car.getY()
         );
         
         for (GameStateObserver observer : observers) {
